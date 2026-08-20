@@ -26,12 +26,7 @@ function waitForProcess(child) {
 }
 
 export async function runBuildProcess(request) {
-  const child = spawn(request.command, request.args, {
-    cwd: request.cwd,
-    detached: supportsProcessGroups(),
-    env: request.env,
-    stdio: "inherit",
-  });
+  let child;
   let stopPromise;
   const stopChild = () => {
     stopPromise ??= stopProcessGroupLeaderFirst({
@@ -42,8 +37,17 @@ export async function runBuildProcess(request) {
   };
   const handleSigint = () => stopChild();
   const handleSigterm = () => stopChild();
+  // Register the handlers before spawn. A signal that lands between spawn and
+  // registration would hit Node's default action and kill this process while
+  // the build child keeps running.
   process.on("SIGINT", handleSigint);
   process.on("SIGTERM", handleSigterm);
+  child = spawn(request.command, request.args, {
+    cwd: request.cwd,
+    detached: supportsProcessGroups(),
+    env: request.env,
+    stdio: "inherit",
+  });
 
   try {
     const result = await waitForProcess(child);
